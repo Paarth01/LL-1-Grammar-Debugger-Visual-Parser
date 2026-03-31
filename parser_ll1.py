@@ -4,12 +4,13 @@ class TreeNode:
         self.id_num = id_num
         self.children = []
 
-def parse(grammar, parse_table, input_string):
+def parse(grammar, parse_table, follow_sets, tokens):
     """
-    Simulates the LL(1) predictive parsing table on an input string.
+    Simulates the LL(1) predictive parsing table on a list of tokens.
+    Uses Panic Mode error recovery.
     Returns: success (bool), trace (list of dicts), and root (TreeNode)
     """
-    tokens = input_string.strip().split()
+    tokens = tokens.copy()
     tokens.append('$')
     
     trace = []
@@ -22,7 +23,7 @@ def parse(grammar, parse_table, input_string):
     stack = [('$', None), (grammar.start_symbol, root)]
     
     idx = 0
-    success = False
+    success = True
     
     while len(stack) > 0:
         top_sym, top_node = stack[-1]
@@ -41,7 +42,6 @@ def parse(grammar, parse_table, input_string):
                 'input': current_input_str,
                 'action': 'Accept'
             })
-            success = True
             break
             
         if top_sym == current_token:
@@ -56,24 +56,35 @@ def parse(grammar, parse_table, input_string):
             trace.append({
                 'stack': current_stack_str,
                 'input': current_input_str,
-                'action': f"Error: Expected {top_sym}, found {current_token}"
+                'action': f"Error: Expected '{top_sym}' missing. Synchronizing (popped)."
             })
-            break
+            stack.pop()
+            success = False
         elif top_sym in grammar.non_terminals:
             prods = parse_table[top_sym].get(current_token, [])
             if len(prods) == 0:
-                trace.append({
-                    'stack': current_stack_str,
-                    'input': current_input_str,
-                    'action': f"Error: No rule for {top_sym} on {current_token}"
-                })
-                break
+                if current_token in follow_sets.get(top_sym, set()):
+                    trace.append({
+                        'stack': current_stack_str,
+                        'input': current_input_str,
+                        'action': f"Error: No rule for {top_sym} on {current_token}. Synchronizing (popped {top_sym})."
+                    })
+                    stack.pop()
+                else:
+                    trace.append({
+                        'stack': current_stack_str,
+                        'input': current_input_str,
+                        'action': f"Error: Unexpected '{current_token}'. Skipping."
+                    })
+                    idx += 1
+                success = False
             elif len(prods) > 1:
                 trace.append({
                     'stack': current_stack_str,
                     'input': current_input_str,
-                    'action': f"Error: Conflict for {top_sym} on {current_token}"
+                    'action': f"Error: Conflict for {top_sym} on {current_token}. Halting."
                 })
+                success = False
                 break
             else:
                 prod = prods[0]
@@ -100,8 +111,9 @@ def parse(grammar, parse_table, input_string):
             trace.append({
                 'stack': current_stack_str,
                 'input': current_input_str,
-                'action': f"Error: Unknown symbol on stack {top_sym}"
+                'action': f"Error: Unknown symbol on stack '{top_sym}'. Halting."
             })
+            success = False
             break
 
     return success, trace, root
