@@ -1,5 +1,5 @@
 import re
-
+from lexer import tokenize
 class Grammar:
     def __init__(self, start_symbol=None):
         self.rules = {}  # dict of NonTerminal -> list of lists of symbols. e.g. {'E': [['E', '+', 'T'], ['T']]}
@@ -28,16 +28,16 @@ class Grammar:
             if not self.start_symbol:
                 self.start_symbol = lhs
                 
-            productions = [prod.strip().split() for prod in rhs_str.split('|')]
             if lhs not in self.rules:
                 self.rules[lhs] = []
-            
-            for prod in productions:
-                # Remove empty strings if they appeared due to multiple spaces
-                prod = [sym.strip() for sym in prod if sym.strip()]
-                if not prod:
-                    prod = ['epsilon']
-                self.rules[lhs].append(prod)
+                
+            for prod in rhs_str.split('|'):
+                # Try auto-tokenization to split symbols like E+T into E, +, T
+                tokens = tokenize(prod.strip(), use_lexer=True)
+                if not tokens:
+                    tokens = ['epsilon']
+                self.rules[lhs].append(tokens)
+                
                 
         # Make sure all LHS keys exist in non_terminals
         for nt in self.rules.keys():
