@@ -1,11 +1,13 @@
 import streamlit as st
 import pandas as pd
 from grammar_core import Grammar
-from transform import eliminate_left_recursion
+from transform import eliminate_left_recursion, left_factor
 from first_follow import compute_first, compute_follow
 from parse_table import generate_parse_table, has_conflicts
 from parser_ll1 import parse
+from parser_ll1 import parse
 from visualize import generate_tree_dot
+from lexer import tokenize
 
 st.set_page_config(page_title="LL(1) Grammar Debugger", layout="wide")
 
@@ -20,7 +22,8 @@ with col1:
     grammar_input = st.text_area("Enter grammar rules (e.g., A -> B c | epsilon):", value=default_grammar, height=200)
     
     st.header("2. Input String")
-    test_string = st.text_input("Enter string to parse (space-separated tokens):", value="id + id * id")
+    test_string = st.text_input("Enter string to parse:", value="id + id * id")
+    use_lexer = st.checkbox("Use Auto-Tokenizer (recognizes standard operators & words regardless of spaces)", value=True)
     
     run_btn = st.button("Run Analysis")
 
@@ -31,8 +34,9 @@ with col2:
             g = Grammar()
             g.parse_from_string(grammar_input)
             
-            # 2. Eliminate Left Recursion
-            g_transformed = eliminate_left_recursion(g)
+            # 2. Eliminate Left Recursion and Left Factor
+            g_no_lr = eliminate_left_recursion(g)
+            g_transformed = left_factor(g_no_lr)
             
             # 3. FIRST and FOLLOW
             first_sets = compute_first(g_transformed)
@@ -43,7 +47,8 @@ with col2:
             is_ll1 = not has_conflicts(parse_table)
             
             # 5. Parsing
-            success, trace, tree_root = parse(g_transformed, parse_table, test_string)
+            tokens = tokenize(test_string, use_lexer=use_lexer)
+            success, trace, tree_root = parse(g_transformed, parse_table, follow_sets, tokens)
             
             # --- Output Sections ---
             st.markdown("### 📊 Analysis Results")
@@ -58,7 +63,7 @@ with col2:
             ])
             
             with tab_grammar:
-                st.info("Left recursion elimination converts grammar into a form suitable for LL(1) parsing. If the grammar has no left recursion, it remains unchanged.")
+                st.info("Left recursion elimination and left factoring convert the grammar into a form suitable for LL(1) parsing. If the grammar needs no transformation, it remains unchanged.")
                 st.subheader("Original Grammar")
                 st.code(g.display(), language="text")
                 
