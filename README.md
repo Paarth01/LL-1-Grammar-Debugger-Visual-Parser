@@ -17,11 +17,12 @@ The **LL(1) Grammar Debugger & Visual Parser** is a comprehensive, interactive w
 
 ### Key Features
 
-1. **Left Recursion Elimination**: Automatically transforms your input grammar to remove immediate left recursion, rendering it more suitable for LL(1) parsing.
+1. **Left Recursion & Left Factoring**: Automatically transforms your input grammar to remove left recursion and applies left-factoring to resolve FIRST/FIRST conflicts, rendering it highly suitable for LL(1) parsing.
 2. **FIRST & FOLLOW Sets**: Dynamically computes and clearly tabulates the FIRST and FOLLOW sets for every non-terminal in the transformed grammar.
 3. **Parse Table Generation & Conflict Detection**: Automatically builds the LL(1) parsing table. If multiple productions map to the same cell, the tool immediately flags the grammar as **NOT LL(1)** and highlights the conflicting rules.
-4. **Interactive Parsing Trace**: Given an input string (e.g., `id + id * id`), the tool performs predictive parsing and displays a detailed step-by-step trace showing the Stack, remaining Input, and the Action taken.
-5. **Parse Tree Visualization**: Integrates with Graphviz to render a beautiful, graphical representation of the resulting parse tree if the string is successfully parsed.
+4. **Auto-Tokenizer / Lexer**: Automatically tokenizes standard mathematical and programming strings (e.g., `id=num+id`) without requiring strict space separation.
+5. **Interactive Panic-Mode Parsing Trace**: Performs predictive parsing and displays a detailed step-by-step trace showing the Stack, remaining Input, and the Action taken. Incorporates intelligent **Panic Mode error recovery** that utilizes FOLLOW sets to synchronize around syntax errors rather than crashing.
+6. **Parse Tree Visualization**: Integrates with Graphviz to render a beautiful, graphical representation of the resulting parse tree if the string is successfully parsed.
 
 ### Workflow
 
@@ -30,25 +31,26 @@ The application follows a standard pipeline to analyze and parse inputs:
 ```mermaid
 graph TD
     A[Raw Grammar String] --> B(Grammar Parsing)
-    B --> C{Immediate Left Recursion?}
-    C -- Yes --> D(Eliminate Left Recursion)
-    C -- No --> E(Compute FIRST Sets)
-    D --> E
+    B --> C[Eliminate Left Recursion]
+    C --> D[Apply Left Factoring]
+    D --> E(Compute FIRST Sets)
     E --> F(Compute FOLLOW Sets)
     F --> G(Parse Table Construction)
     G --> H{LL1 Conflicts?}
     H -- Yes --> I[Flag as NOT LL1]
-    H -- No --> J(Predictive Parsing Algorithm)
-    J -.-> K[Input Trace Generated]
-    J -.-> L[Parse Tree Visualized]
+    H -- No --> J(Auto-Tokenize Input String)
+    J --> K(Panic-Mode Parsing Algorithm)
+    K -.-> L[Input Trace Generated]
+    K -.-> M[Parse Tree Visualized]
 ```
 
 1. **Grammar Parsing:** The plain-text input representing the CFG is parsed into an internal `Grammar` object, identifying all terminals, non-terminals, productions, and the start symbol.
-2. **Grammar Transformation:** The `eliminate_left_recursion` module processes the grammar to safely remove any immediate left recursion, updating the rules as needed.
+2. **Grammar Transformation:** The system applies `eliminate_left_recursion` to remove left-recursive rules, and then systematically extracts common prefixes to resolve FIRST/FIRST conflicts using the newly added `left_factor` algorithm.
 3. **Set Computation:** The transformed grammar is used by the algorithm to compute FIRST sets recursively, which are then used (along with the augmented rules) to compute FOLLOW sets.
 4. **Parse Table Construction:** Using the FIRST and FOLLOW sets, the `generate_parse_table` system populates a 2D parsing table. If any table cell requires more than one production rule, the system explicitly reports an LL(1) conflict.
-5. **Predictive Parsing Algorithm:** Given an input string, the continuous `parse` algorithm initializes a stack with the grammar's start symbol and an end marker (`$`). It reads input tokens left-to-right, applying production rules dictated by the parse table until the string is completely accepted or a syntax error is safely encountered.
-6. **Abstract Syntax Tree Visualization:** Concurrently during the parsing phase, an Abstract Syntax Tree (AST) node structure is built. If successful, this root node is passed to the Streamlit Graphviz component to display a graphical node-link parse tree diagram.
+5. **Lexical Analysis:** The input string is passed through `lexer.py` to auto-tokenize standard programming symbols, gracefully falling back to space-separation if arbitrary symbols are used.
+6. **Predictive Parsing Algorithm:** The continuous `parse` algorithm dynamically matches tokens using the stack. If a syntax error is encountered, it seamlessly enters **Panic Mode**, using FOLLOW sets to skip or synchronize over the broken tokens so it can continue analyzing the rest of the string.
+7. **Abstract Syntax Tree Visualization:** Concurrently during the parsing phase, an Abstract Syntax Tree (AST) node structure is built. If successful, this root node is passed to the Streamlit Graphviz component to display a graphical node-link parse tree diagram.
 
 ### Tech Stack
 - **Python**: Core logic for grammar parsing, set computation, and AST generation.
@@ -91,8 +93,9 @@ This will automatically open the application in your default web browser (usuall
 ### Project Structure
 - `app.py`: Streamlit frontend orchestration.
 - `grammar_core.py`: Core logic for representing the grammar, terminals, and non-terminals.
-- `transform.py`: Functions applied for grammar transformations (like left recursion elimination).
+- `transform.py`: Functions applied for grammar transformations (left recursion elimination and iterative left factoring).
 - `first_follow.py`: Logic to recursively compute FIRST and FOLLOW sets.
 - `parse_table.py`: Generates the predictive parse table and detects conflicts.
-- `parser_ll1.py`: Contains the LL(1) parsing algorithm (stack, input pointer) and generates the parse trace.
+- `lexer.py`: Regular expression-based token generation for unspaced strings.
+- `parser_ll1.py`: Contains the augmented LL(1) parsing algorithm featuring Panic Mode error recovery.
 - `visualize.py`: Constructs the `.dot` format string for Graphviz tree rendering.
