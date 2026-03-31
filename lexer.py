@@ -11,11 +11,11 @@ def tokenize(input_string, use_lexer=True):
         return input_string.strip().split()
         
     # Matches:
-    # 1. Common multi-character operators (==, <=, >=, !=, &&, ||)
-    # 2. Words (identifiers, keywords)
-    # 3. Numbers (digits)
+    # 1. Common multi-character operators (==, <=, >=, !=, &&, ||, ->, =>)
+    # 2. Words (identifiers, keywords, supporting optional trailing apostrophes like E')
+    # 3. Numbers (digits with optional decimals)
     # 4. Individual non-whitespace characters (symbols like +, -, *, /, (, ))
-    pattern = r'==|<=|>=|!=|&&|\|\||[a-zA-Z_]\w*|\d+|[^\w\s]'
+    pattern = r"==|<=|>=|!=|&&|\|\||->|=>|[a-zA-Z_]\w*\'*|\d+(?:\.\d+)?|[^\w\s]"
     
     tokens = [match.group(0) for match in re.finditer(pattern, input_string)]
     return tokens
