@@ -1,8 +1,9 @@
 from grammar_core import Grammar
-from transform import eliminate_left_recursion
+from transform import eliminate_left_recursion, left_factor
 from first_follow import compute_first, compute_follow
 from parse_table import generate_parse_table, has_conflicts
 from parser_ll1 import parse
+from lexer import tokenize
 
 grammar_input = """E -> E + T | T
 T -> T * F | F
@@ -16,7 +17,8 @@ g.parse_from_string(grammar_input)
 print("\n--- Original Grammar ---")
 print(g.display())
 
-g_trans = eliminate_left_recursion(g)
+g_no_lr = eliminate_left_recursion(g)
+g_trans = left_factor(g_no_lr)
 print("\n--- Transformed Grammar ---")
 print(g_trans.display())
 
@@ -31,7 +33,8 @@ for k, v in follow.items(): print(f"{k}: {v}")
 table = generate_parse_table(g_trans, first, follow)
 print(f"\n--- Parse Table Conflicts: {has_conflicts(table)} ---")
 
-success, trace, tree = parse(g_trans, table, test_string)
+tokens = tokenize(test_string, use_lexer=True)
+success, trace, tree = parse(g_trans, table, follow, tokens)
 print(f"\n--- Parsing Success: {success} ---")
 for t in trace:
     print(t)
