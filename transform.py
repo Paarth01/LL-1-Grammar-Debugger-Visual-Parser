@@ -81,3 +81,87 @@ def eliminate_left_recursion(grammar):
     new_grammar.non_terminals = set(rules.keys())
     new_grammar.compute_terminals()
     return new_grammar
+
+def get_longest_common_prefix(prods):
+    if not prods: return []
+    if len(prods) == 1: return []
+    prefix = []
+    min_len = min(len(p) for p in prods)
+    for i in range(min_len):
+        char = prods[0][i]
+        if all(p[i] == char for p in prods):
+            prefix.append(char)
+        else:
+            break
+    return prefix
+
+def left_factor(grammar):
+    """
+    Eliminates left factoring from the given grammar.
+    Returns a new Grammar object.
+    """
+    new_grammar = Grammar(grammar.start_symbol)
+    
+    # Deep copy the rules
+    rules = {nt: [list(p) for p in prods] for nt, prods in grammar.rules.items()}
+    non_terms = list(grammar.rules.keys())
+    
+    changed = True
+    while changed:
+        changed = False
+        current_nts = list(rules.keys())
+        for nt in current_nts:
+            prods = rules[nt]
+            
+            # Group productions by their first symbol
+            groups = {}
+            for p in prods:
+                if p and p != ['epsilon']:
+                    head = p[0]
+                    if head not in groups:
+                        groups[head] = []
+                    groups[head].append(p)
+                    
+            best_prefix = []
+            best_group = []
+            
+            # Find the longest common prefix among pairs or groups of productions
+            for head, group_prods in groups.items():
+                if len(group_prods) > 1:
+                    prefix = get_longest_common_prefix(group_prods)
+                    if len(prefix) > len(best_prefix):
+                        best_prefix = prefix
+                        best_group = group_prods
+                        
+            if len(best_prefix) > 0:
+                changed = True
+                
+                # New non-terminal A'
+                nt_prime = nt + "'"
+                while nt_prime in rules or nt_prime in non_terms:
+                    nt_prime += "'"
+                
+                new_nt_prods = []
+                for p in best_group:
+                    beta = p[len(best_prefix):]
+                    if not beta:
+                        new_nt_prods.append(['epsilon'])
+                    else:
+                        new_nt_prods.append(beta)
+                        
+                # Update original rules:
+                remaining_prods = [p for p in prods if p not in best_group]
+                factored_prod = best_prefix + [nt_prime]
+                remaining_prods.append(factored_prod)
+                
+                rules[nt] = remaining_prods
+                rules[nt_prime] = new_nt_prods
+                non_terms.append(nt_prime)
+                
+                # Break to restart loop because rules changed
+                break 
+
+    new_grammar.rules = rules
+    new_grammar.non_terminals = set(rules.keys())
+    new_grammar.compute_terminals()
+    return new_grammar
