@@ -23,6 +23,9 @@ The **LL(1) Grammar Debugger & Visual Parser** is a comprehensive, interactive w
 4. **Auto-Tokenizer / Lexer**: Automatically tokenizes standard mathematical and programming strings (e.g., `id=num+id`) without requiring strict space separation.
 5. **Interactive Panic-Mode Parsing Trace**: Performs predictive parsing and displays a detailed step-by-step trace showing the Stack, remaining Input, and the Action taken. Incorporates intelligent **Panic Mode error recovery** that utilizes FOLLOW sets to synchronize around syntax errors rather than crashing.
 6. **Parse Tree Visualization**: Integrates with Graphviz to render a beautiful, graphical representation of the resulting parse tree if the string is successfully parsed.
+7. **Intermediate Code Generation (TAC)**: Emits Three Address Code (TAC) for validated arithmetic and control flow token sequences, assigning variables and conditional branches.
+8. **Local Code Optimization**: Automatically scans TAC output to perform algebraic simplifications (e.g. `x + 0 -> x`) and constant folding (e.g. `3 + 4 -> 7`).
+9. **Target Code Assembly generation**: Translates the optimized TAC sequentially into a simplified pseudo-assembly architecture leveraging virtual registers and standard machine mappings (`LOAD`, `STORE`, `MUL`, `ADD`, `CJMP`).
 
 ### Workflow
 
@@ -42,6 +45,9 @@ graph TD
     J --> K(Panic-Mode Parsing Algorithm)
     K -.-> L[Input Trace Generated]
     K -.-> M[Parse Tree Visualized]
+    L --> N(Generate TAC)
+    N --> O(Optimize TAC)
+    O --> P[Target Pseudo-Assembly]
 ```
 
 1. **Grammar Parsing:** The plain-text input representing the CFG is parsed into an internal `Grammar` object, identifying all terminals, non-terminals, productions, and the start symbol.
@@ -51,6 +57,8 @@ graph TD
 5. **Lexical Analysis:** The input string is passed through `lexer.py` to auto-tokenize standard programming symbols, gracefully falling back to space-separation if arbitrary symbols are used.
 6. **Predictive Parsing Algorithm:** The continuous `parse` algorithm dynamically matches tokens using the stack. If a syntax error is encountered, it seamlessly enters **Panic Mode**, using FOLLOW sets to skip or synchronize over the broken tokens so it can continue analyzing the rest of the string.
 7. **Abstract Syntax Tree Visualization:** Concurrently during the parsing phase, an Abstract Syntax Tree (AST) node structure is built. If successful, this root node is passed to the Streamlit Graphviz component to display a graphical node-link parse tree diagram.
+8. **TAC Generation:** Successfully parsed tokens are passed down to dynamically produce mathematical and branching Three Address Code arrays automatically.
+9. **Code Optimization & Assembly**: TAC operations are pruned and mapped into simulated multi-register virtual machine pseudo-assembly providing the full spectrum of compiler backend steps.
 
 ### Tech Stack
 - **Python**: Core logic for grammar parsing, set computation, and AST generation.
@@ -99,3 +107,6 @@ This will automatically open the application in your default web browser (usuall
 - `lexer.py`: Regular expression-based token generation for unspaced strings.
 - `parser_ll1.py`: Contains the augmented LL(1) parsing algorithm featuring Panic Mode error recovery.
 - `visualize.py`: Constructs the `.dot` format string for Graphviz tree rendering.
+- `tac.py`: Intercepts valid code arrays to emit Three Address Code structure.
+- `optimizer.py`: Handles constant folding and isolated algebraic reduction rules.
+- `target_codegen.py`: Maps simplified commands natively to backend Pseudo-Assembly structure formats representing typical MIPS/x86 logic.
