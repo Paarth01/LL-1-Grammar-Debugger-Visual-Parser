@@ -1,0 +1,77 @@
+1. Any Sequence of a and b (The (a|b)* Language)
+This accepts absolutely any combination and length of as and bs.
+
+text
+S -> a S | b S | epsilon
+Test String to use: a b a a b b a b
+
+2. Equal Number of as followed by bs (The a^n b^n Language)
+This is a classic context-free grammar that accepts sequences like a b, a a b b, a a a a b b b b, etc.
+
+text
+S -> a S b | epsilon
+Test String to use: a a a a b b b b
+
+3. Strictly Alternating a and b
+This accepts sequences that strictly repeat the pattern a b (e.g. a b a b a b).
+
+text
+S -> a b S | epsilon
+Test String to use: a b a b a b a b a b
+
+4. Input Grammar
+text
+Program -> StatementList
+StatementList -> Statement StatementList | epsilon
+Statement -> IfStmt | WhileStmt | AssignStmt | ExprStmt
+IfStmt -> if ( Expr ) { StatementList } ElsePart
+ElsePart -> else { StatementList } | epsilon
+WhileStmt -> while ( Expr ) { StatementList }
+AssignStmt -> let id = Expr ;
+ExprStmt -> Expr ;
+Expr -> Term ExprPrime
+ExprPrime -> + Term ExprPrime | - Term ExprPrime | epsilon
+Term -> Factor TermPrime
+TermPrime -> * Factor TermPrime | / Factor TermPrime | epsilon
+Factor -> ( Expr ) | id | num | call id ( ArgList )
+ArgList -> Expr ArgListPrime | epsilon
+ArgListPrime -> , Expr ArgListPrime | epsilon
+Input String:
+text
+let id = num ; while ( id + num ) { if ( id ) { call id ( id , num ) ; } else { let id = num * num ; } }
+What to expect when you Run Analysis:
+
+You will see 15 Non-Terminals and 18 Terminals!
+
+PROBLEMS:
+
+1. The Common Prefix (FIRST/FIRST Conflict)
+LL(1) parsers can only look exactly one token ahead. In this grammar, when the parser sees the token id, it doesn't know whether to use the Assignment rule or the Function Call rule because they both start with id.
+
+text
+Statement -> id = Expr | id ( Expr )
+Expr -> num
+Because of this, you will see a big red CONFLICT in the parse table under the id column!
+
+2. Pure Ambiguity (FIRST/FIRST Conflict)
+A grammar that is purely ambiguous can never be LL(1). Here, the parser sees an a and has absolutely no idea whether you are trying to parse the A rule or the B rule.
+
+text
+S -> A | B
+A -> a a
+B -> a a
+3. The Classic "Dangling Else" (FIRST/FOLLOW Conflict)
+This is the most famous conflict in compiler design! In this grammar, if the parser is trying to deal with ElsePart and sees the else token, it doesn't know whether to match the else S rule, or use the epsilon rule and let the outer statement handle the else. Both are technically valid, so it panics:
+
+text
+S -> if E then S ElsePart | other
+ElsePart -> else S | epsilon
+E -> id
+
+LEFT FACTORING GRAMMAR:
+
+1. Grammar rules:
+text
+A -> a b c d | a b c e | a b f
+String to parse: a b c e
+

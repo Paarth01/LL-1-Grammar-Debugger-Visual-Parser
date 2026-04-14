@@ -1,0 +1,169 @@
+import streamlit as st
+import pandas as pd
+from grammar_core import Grammar
+from transform import eliminate_left_recursion, left_factor
+from first_follow import compute_first, compute_follow
+from parse_table import generate_parse_table, has_conflicts
+from parser_ll1 import parse
+from visualize import generate_tree_dot
+from lexer import tokenize
+from tac import generate_tac
+from optimizer import optimize_tac
+from target_codegen import generate_assembly
+
+st.set_page_config(page_title="LL(1) Grammar Debugger", layout="wide")
+
+st.title("🧩 LL(1) Grammar Debugger & Visual Parser")
+st.markdown("Analyze Context-Free Grammars, eliminate left recursion, compute FIRST/FOLLOW sets, generate LL(1) parse tables, and visualize predictive parsing.")
+
+col1, col2 = st.columns([1, 2])
+
+with col1:
+    st.header("1. Input Grammar")
+    default_grammar = "E -> E + T | T\nT -> T * F | F\nF -> ( E ) | id"
+    grammar_input = st.text_area("Enter grammar rules (e.g., A -> B c | epsilon):", value=default_grammar, height=200)
+    
+    st.header("2. Input String")
+    test_string = st.text_input("Enter string to parse:", value="id + id * id")
+    use_lexer = st.checkbox("Use Auto-Tokenizer (recognizes standard operators & words regardless of spaces)", value=True)
+    
+    run_btn = st.button("Run Analysis")
+
+with col2:
+    if run_btn:
+        try:
+            # 1. Parse Grammar
+            g = Grammar()
+            g.parse_from_string(grammar_input)
+            
+            # 2. Eliminate Left Recursion and Left Factor
+            g_no_lr = eliminate_left_recursion(g)
+            g_transformed = left_factor(g_no_lr)
+            
+            # 3. FIRST and FOLLOW
+            first_sets = compute_first(g_transformed)
+            follow_sets = compute_follow(g_transformed, first_sets)
+            
+            # 4. Parse Table
+            parse_table = generate_parse_table(g_transformed, first_sets, follow_sets)
+            is_ll1 = not has_conflicts(parse_table)
+            
+            # 5. Parsing
+            tokens = tokenize(test_string, use_lexer=use_lexer)
+            success, trace, tree_root = parse(g_transformed, parse_table, follow_sets, tokens)
+            
+            # --- Output Sections ---
+            st.markdown("### 📊 Analysis Results")
+            
+            tab_grammar, tab_symbols, tab_sets, tab_table, tab_parse, tab_tree, tab_tac, tab_opt, tab_asm = st.tabs([
+                "1. Transform", 
+                "2. Symbols", 
+                "3. FIRST/FOLLOW", 
+                "4. Parse Table", 
+                "5. Parse Trace", 
+                "6. Visual Tree",
+                "7. TAC",
+                "8. Optimized TAC",
+                "9. Target Code"
+            ])
+            
+            with tab_grammar:
+                st.info("Left recursion elimination and left factoring convert the grammar into a form suitable for LL(1) parsing. If the grammar needs no transformation, it remains unchanged.")
+                st.subheader("Original Grammar")
+                st.code(g.display(), language="text")
+                
+                st.subheader("Transformed Grammar")
+                st.code(g_transformed.display(), language="text")
+            
+            with tab_symbols:
+                symbols_data = []
+                for nt in sorted(list(g_transformed.non_terminals)):
+                    type_str = "Start Symbol (Non-Terminal)" if nt == g_transformed.start_symbol else "Non-Terminal"
+                    symbols_data.append({"Symbol": nt, "Type": type_str})
+                for t in sorted(list(g_transformed.terminals)):
+                    symbols_data.append({"Symbol": t, "Type": "Terminal"})
+                
+                st.dataframe(pd.DataFrame(symbols_data))
+            
+            with tab_sets:
+                st.subheader("FIRST Sets")
+                first_df = [{"Non-Terminal": nt, "FIRST": "{ " + ", ".join(first_sets[nt]) + " }"} for nt in g_transformed.non_terminals]
+                st.dataframe(pd.DataFrame(first_df))
+                
+                st.subheader("FOLLOW Sets")
+                follow_df = [{"Non-Terminal": nt, "FOLLOW": "{ " + ", ".join(follow_sets[nt]) + " }"} for nt in g_transformed.non_terminals]
+                st.dataframe(pd.DataFrame(follow_df))
+                
+            with tab_table:
+                if not is_ll1:
+                    st.error("⚠️ Grammar is **NOT LL(1)**. There are conflicts in the parse table!")
+                else:
+                    st.success("✅ Grammar is **LL(1)**. No conflicts found.")
+                    
+                terminals = sorted(list(g_transformed.terminals | {'$'}))
+                table_data = []
+                for nt in g_transformed.non_terminals:
+                    row = {"Non-Terminal": f"<b>{nt}</b>"}
+                    for t in terminals:
+                        prods = parse_table[nt].get(t, [])
+                        if len(prods) == 0:
+                            row[t] = ""
+                        elif len(prods) == 1:
+                            row[t] = f"{nt} &rarr; {' '.join(prods[0])}"
+                        else:
+                            row[t] = "<span style='color:red; font-weight:bold'>CONFLICT</span><br>" + "<br>".join([f"{nt} &rarr; {' '.join(p)}" for p in prods])
+                    table_data.append(row)
+                    
+                df = pd.DataFrame(table_data)
+                st.markdown(df.to_html(escape=False, index=False), unsafe_allow_html=True)
+            
+            with tab_parse:
+                if success:
+                    st.success(f"✅ String **'{test_string}'** successfully parsed!")
+                else:
+                    st.error(f"❌ Failed to parse string **'{test_string}'**. See trace below.")
+                    
+                trace_df = pd.DataFrame(trace)
+                st.dataframe(trace_df)
+            
+            with tab_tree:
+                if success:
+                    st.info("The visual parse tree demonstrates the predictive parsing process from the Start Symbol down to the input tokens.")
+                    dot_str = generate_tree_dot(tree_root)
+                    st.graphviz_chart(dot_str)
+                else:
+                    st.warning("⚠️ Parse tree is incomplete because parsing failed due to conflicts or invalid syntax.")
+                    if tree_root:
+                        dot_str = generate_tree_dot(tree_root)
+                        st.graphviz_chart(dot_str)
+            
+            with tab_tac:
+                if success:
+                    st.info("Three Address Code is generated sequentially from the valid token stream. It natively maps assignments, arithmetic expressions, and standard control flow structures.")
+                    tac_output = generate_tac(tokens)
+                    if tac_output:
+                        st.code(tac_output, language="text")
+                    else:
+                        st.warning("Could not generate intermediate code. Ensure tokens match standard operators or syntax.")
+                else:
+                    st.warning("⚠️ Cannot generate TAC. Input string was not parsed successfully.")
+
+            with tab_opt:
+                if success and 'tac_output' in locals() and tac_output:
+                    st.info("Local Code Optimization applied (Constant Folding and Algebraic Simplification).")
+                    opt_tac = optimize_tac(tac_output)
+                    st.code(opt_tac, language="text")
+                else:
+                    st.warning("⚠️ No TAC available to optimize.")
+
+            with tab_asm:
+                if success and 'opt_tac' in locals() and opt_tac:
+                    st.info("Pseudo-Assembly (Target Code) generated utilizing simplified basic generic architecture.")
+                    asm_code = generate_assembly(opt_tac)
+                    st.code(asm_code, language="text")
+                else:
+                    st.warning("⚠️ No optimized TAC available for target code generation.")
+
+
+        except Exception as e:
+            st.error(f"An error occurred during analysis: {str(e)}")
